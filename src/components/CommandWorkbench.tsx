@@ -17,7 +17,7 @@ import {
   Minimize2
 } from 'lucide-react';
 import { BuildConfig, TargetPlatform } from '../types/build';
-import { generateFlutterBuildArgs, generateFullScript } from '../utils/commandGenerator';
+import { generateFlutterBuildArgs, generateFullScript, generateGradleBuildCommand } from '../utils/commandGenerator';
 
 interface CommandWorkbenchProps {
   config: BuildConfig;
@@ -34,12 +34,16 @@ export const CommandWorkbench: React.FC<CommandWorkbenchProps> = ({
 }) => {
   const [copiedScript, setCopiedScript] = useState(false);
   const [copiedOneLiner, setCopiedOneLiner] = useState(false);
+  const [copiedGradleCommand, setCopiedGradleCommand] = useState(false);
+  const [commandViewMode, setCommandViewMode] = useState<'flutter' | 'gradle'>('flutter');
   const [newDefineKey, setNewDefineKey] = useState('');
   const [newDefineVal, setNewDefineVal] = useState('');
 
   const fullScript = generateFullScript(config);
+  const gradleBuildCmd = generateGradleBuildCommand(config);
   const singleLineBuild = `flutter ${generateFlutterBuildArgs(config).join(' ')}`;
   const combinedOneLiner = `${config.runClean ? 'flutter clean && ' : ''}${config.runPubGet ? 'flutter pub get && ' : ''}${singleLineBuild}`;
+  const combinedGradleOneLiner = `cd android && ${gradleBuildCmd}`;
 
   const handleCopyScript = () => {
     navigator.clipboard.writeText(fullScript);
@@ -546,7 +550,7 @@ export const CommandWorkbench: React.FC<CommandWorkbenchProps> = ({
                   className="mt-1 rounded border-zinc-700 text-sky-500 focus:ring-sky-500/20 bg-zinc-900"
                 />
                 <div className="flex-1">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <label htmlFor="minifyEnabled" className="text-xs font-semibold text-zinc-200 cursor-pointer flex items-center gap-2">
                       <Minimize2 className="w-3.5 h-3.5 text-sky-400" />
                       <span>R8 Code Shrinking (minifyEnabled / isMinifyEnabled)</span>
@@ -564,37 +568,61 @@ export const CommandWorkbench: React.FC<CommandWorkbenchProps> = ({
                   <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
                     Controls <code className="text-sky-300 font-mono">isMinifyEnabled</code> in Kotlin DSL 
                     and <code className="text-sky-300 font-mono">minifyEnabled</code> in Groovy Gradle. 
-                    When enabled, Android's R8 optimizer strips unused Java/Kotlin code, reduces dex method count, 
-                    and applies ProGuard optimization rules.
+                    Strips unused Java/Kotlin code, dead methods, and applies ProGuard optimization rules.
                   </p>
+                </div>
+              </div>
 
-                  {/* Resource Shrinking Sub-option (only valid if minifyEnabled is true) */}
-                  <div className="mt-2.5 pt-2 border-t border-zinc-800/80 flex items-center justify-between text-xs">
-                    <label
-                      htmlFor="shrinkResources"
-                      className={`flex items-center gap-2 cursor-pointer ${
-                        config.minifyEnabled ? 'text-zinc-300 hover:text-zinc-100' : 'text-zinc-600 cursor-not-allowed'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        id="shrinkResources"
-                        disabled={!config.minifyEnabled}
-                        checked={config.shrinkResources && config.minifyEnabled}
-                        onChange={(e) => onConfigChange({ ...config, shrinkResources: e.target.checked })}
-                        className="rounded border-zinc-700 text-sky-500 focus:ring-sky-500/20 bg-zinc-900 disabled:opacity-40"
-                      />
-                      <span className="text-[11px]">
-                        Also enable Resource Shrinking (isShrinkResources / shrinkResources)
-                      </span>
+              {/* Resource Shrinking (shrinkResources) Standalone Toggle */}
+              <div className="p-3.5 rounded-lg border border-zinc-800 bg-zinc-950/50 flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="shrinkResources"
+                  checked={config.shrinkResources}
+                  onChange={(e) => {
+                    const isShrink = e.target.checked;
+                    onConfigChange({
+                      ...config,
+                      shrinkResources: isShrink,
+                      // In Android Gradle Plugin, resource shrinking requires code shrinking
+                      minifyEnabled: isShrink ? true : config.minifyEnabled,
+                    });
+                  }}
+                  className="mt-1 rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500/20 bg-zinc-900"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label htmlFor="shrinkResources" className="text-xs font-semibold text-zinc-200 cursor-pointer flex items-center gap-2">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Resource Shrinking (shrinkResources / isShrinkResources)</span>
                     </label>
-                    <span className="text-[10px] text-zinc-500 font-mono hidden sm:inline">
-                      {config.minifyEnabled && config.shrinkResources ? 'Active' : 'Disabled'}
-                    </span>
+                    <div className="flex items-center gap-1.5 font-mono text-[10px]">
+                      <span
+                        className={`px-1.5 py-0.5 rounded border transition-colors ${
+                          config.shrinkResources
+                            ? 'text-emerald-400 bg-emerald-950/60 border-emerald-900'
+                            : 'text-zinc-500 bg-zinc-900 border-zinc-800'
+                        }`}
+                      >
+                        {config.shrinkResources ? 'isShrinkResources = true' : 'isShrinkResources = false'}
+                      </span>
+                      <span className="text-zinc-400 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded">
+                        -PshrinkResources={config.shrinkResources.toString()}
+                      </span>
+                    </div>
                   </div>
+                  <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
+                    Passed to the Gradle build command via <code className="text-emerald-300 font-mono">-PshrinkResources={config.shrinkResources.toString()}</code> and 
+                    configured directly in <code className="text-sky-300 font-mono">android/app/build.gradle.kts</code> and <code className="text-sky-300 font-mono">gradle.properties</code>. 
+                    Strips unreferenced drawables, layouts, mipmaps, strings, and raw assets from the release APK.
+                    <span className="text-zinc-300 block mt-0.5">
+                      ✓ Automatically enforces code shrinking (<code className="text-zinc-200 font-mono">isMinifyEnabled = true</code>) as required by Android Gradle Plugin (AGP).
+                    </span>
+                  </p>
                 </div>
               </div>
             </div>
+
 
             {/* Versioning & Meta */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
@@ -687,78 +715,134 @@ export const CommandWorkbench: React.FC<CommandWorkbenchProps> = ({
         <div className="lg:col-span-5 space-y-5">
           {/* Main Executable Script Box */}
           <div className="bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden shadow-2xl sticky top-20">
-            {/* Header */}
-            <div className="px-4 py-3 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between">
+            {/* Header with Switcher between Flutter CLI and Gradle Build Command */}
+            <div className="px-4 py-2.5 bg-zinc-900/90 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="flex gap-1.5">
+                <div className="flex gap-1.5 mr-1">
                   <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
                   <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
                 </div>
-                <span className="text-xs font-mono text-zinc-300 ml-1">build-release.sh</span>
+                <div className="flex items-center bg-zinc-950 p-0.5 rounded-lg border border-zinc-800 text-xs">
+                  <button
+                    onClick={() => setCommandViewMode('flutter')}
+                    className={`px-2.5 py-1 rounded font-medium transition-colors ${
+                      commandViewMode === 'flutter'
+                        ? 'bg-zinc-800 text-sky-300 shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    Flutter CLI Script
+                  </button>
+                  <button
+                    onClick={() => setCommandViewMode('gradle')}
+                    className={`px-2.5 py-1 rounded font-medium transition-colors flex items-center gap-1.5 ${
+                      commandViewMode === 'gradle'
+                        ? 'bg-zinc-800 text-emerald-300 shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <span>Gradle Build Command</span>
+                    <span className="text-[10px] bg-emerald-950/80 text-emerald-400 border border-emerald-900 px-1 rounded font-mono">
+                      ./gradlew
+                    </span>
+                  </button>
+                </div>
               </div>
+
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={handleCopyScript}
+                  onClick={() => {
+                    const textToCopy = commandViewMode === 'flutter' ? fullScript : combinedGradleOneLiner;
+                    navigator.clipboard.writeText(textToCopy);
+                    setCopiedScript(true);
+                    setTimeout(() => setCopiedScript(false), 2000);
+                  }}
                   className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
                 >
                   {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedScript ? 'Copied Script' : 'Copy All'}</span>
+                  <span>{copiedScript ? 'Copied' : 'Copy Command'}</span>
                 </button>
               </div>
             </div>
 
             {/* Script Viewer */}
             <div className="p-4 bg-zinc-950 font-mono text-xs text-zinc-200 overflow-x-auto space-y-2 select-all leading-relaxed">
-              <pre className="text-zinc-400">
-                <span className="text-zinc-500"># Clean previous build artifacts</span>{'\n'}
-                {config.runClean && <span className="text-emerald-400 font-bold">flutter clean{'\n'}</span>}
-                {config.runPubGet && (
-                  <>
-                    <span className="text-zinc-500"># Resolve dependencies</span>{'\n'}
-                    <span className="text-emerald-400 font-bold">flutter pub get{'\n'}</span>
-                  </>
-                )}
-                {'\n'}
-                <span className="text-zinc-500"># Compile {config.platform} release APK (Min SDK {config.minSdk}, Target SDK {config.targetSdk})</span>{'\n'}
-                <span className="text-sky-300 font-semibold">flutter</span>{' '}
-                <span className="text-amber-300">build</span>{' '}
-                <span className="text-purple-300">{config.target}</span>{' '}
-                <span className="text-emerald-300">--{config.mode}</span>{' '}
-                {config.platform === 'split-per-abi' ? (
-                  <span className="text-yellow-300 font-bold">--split-per-abi</span>
-                ) : config.platform !== 'universal' ? (
-                  <span className="text-yellow-300 font-bold">--target-platform={config.platform}</span>
-                ) : null}{' '}
-                {config.noTreeShakeIcons && (
-                  <span className="text-pink-400 font-bold">--no-tree-shake-icons</span>
-                )}{' '}
-                {config.obfuscate && (
-                  <span className="text-orange-400">--obfuscate --split-debug-info={config.splitDebugInfo}</span>
-                )}{' '}
-                {config.buildName && <span className="text-blue-300">--build-name={config.buildName}</span>}{' '}
-                {config.buildNumber && <span className="text-blue-300">--build-number={config.buildNumber}</span>}{' '}
-                {config.dartDefines
-                  .filter((d) => d.enabled && d.key)
-                  .map((d) => (
-                    <span key={d.id} className="text-teal-300">--dart-define={d.key}={d.value} </span>
-                  ))}
-              </pre>
+              {commandViewMode === 'flutter' ? (
+                <pre className="text-zinc-400">
+                  <span className="text-zinc-500"># Clean previous build artifacts</span>{'\n'}
+                  {config.runClean && <span className="text-emerald-400 font-bold">flutter clean{'\n'}</span>}
+                  {config.runPubGet && (
+                    <>
+                      <span className="text-zinc-500"># Resolve dependencies</span>{'\n'}
+                      <span className="text-emerald-400 font-bold">flutter pub get{'\n'}</span>
+                    </>
+                  )}
+                  {'\n'}
+                  <span className="text-zinc-500"># Compile {config.platform} release APK (Min SDK {config.minSdk}, Target SDK {config.targetSdk})</span>{'\n'}
+                  <span className="text-sky-300 font-semibold">flutter</span>{' '}
+                  <span className="text-amber-300">build</span>{' '}
+                  <span className="text-purple-300">{config.target}</span>{' '}
+                  <span className="text-emerald-300">--{config.mode}</span>{' '}
+                  {config.platform === 'split-per-abi' ? (
+                    <span className="text-yellow-300 font-bold">--split-per-abi</span>
+                  ) : config.platform !== 'universal' ? (
+                    <span className="text-yellow-300 font-bold">--target-platform={config.platform}</span>
+                  ) : null}{' '}
+                  {config.noTreeShakeIcons && (
+                    <span className="text-pink-400 font-bold">--no-tree-shake-icons</span>
+                  )}{' '}
+                  {config.obfuscate && (
+                    <span className="text-orange-400">--obfuscate --split-debug-info={config.splitDebugInfo}</span>
+                  )}{' '}
+                  {config.buildName && <span className="text-blue-300">--build-name={config.buildName}</span>}{' '}
+                  {config.buildNumber && <span className="text-blue-300">--build-number={config.buildNumber}</span>}{' '}
+                  {config.dartDefines
+                    .filter((d) => d.enabled && d.key)
+                    .map((d) => (
+                      <span key={d.id} className="text-teal-300">--dart-define={d.key}={d.value} </span>
+                    ))}
+                </pre>
+              ) : (
+                <pre className="text-zinc-400">
+                  <span className="text-zinc-500"># Direct Android Gradle Release Build Command</span>{'\n'}
+                  <span className="text-zinc-500"># Passes resource &amp; code shrinking flags directly to Gradle assembleRelease</span>{'\n'}
+                  <span className="text-emerald-400 font-bold">cd android{'\n'}</span>
+                  <span className="text-sky-300 font-semibold">./gradlew</span>{' '}
+                  <span className="text-amber-300 font-bold">assembleRelease</span>{' '}
+                  <span className="text-emerald-300 font-bold">-PshrinkResources={config.shrinkResources.toString()}</span>{' '}
+                  <span className="text-purple-300">-PminifyEnabled={config.minifyEnabled.toString()}</span>
+                  {'\n\n'}
+                  <span className="text-zinc-500"># Output APK artifact:</span>{'\n'}
+                  <span className="text-zinc-400">build/app/outputs/flutter-apk/app-{config.platform === 'android-arm64' ? 'arm64-v8a' : config.platform === 'split-per-abi' ? 'arm64-v8a' : 'release'}.apk</span>
+                </pre>
+              )}
             </div>
 
             {/* Quick Single Line Copy Strip */}
-            <div className="px-4 py-2.5 bg-zinc-900/40 border-t border-zinc-800/80 flex items-center justify-between text-xs">
-              <div className="truncate mr-2 font-mono text-zinc-400 text-[11px]">
-                {combinedOneLiner}
+            <div className="px-4 py-2.5 bg-zinc-900/40 border-t border-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+              <div className="truncate w-full sm:w-auto font-mono text-zinc-400 text-[11px]">
+                {commandViewMode === 'flutter' ? combinedOneLiner : combinedGradleOneLiner}
               </div>
-              <button
-                onClick={handleCopyOneLiner}
-                className="shrink-0 flex items-center gap-1 text-sky-400 hover:text-sky-300 font-medium"
-              >
-                {copiedOneLiner ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>1-Liner</span>
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={commandViewMode === 'flutter' ? handleCopyOneLiner : () => {
+                    navigator.clipboard.writeText(combinedGradleOneLiner);
+                    setCopiedGradleCommand(true);
+                    setTimeout(() => setCopiedGradleCommand(false), 2000);
+                  }}
+                  className="flex items-center gap-1 text-sky-400 hover:text-sky-300 font-medium"
+                >
+                  {(commandViewMode === 'flutter' ? copiedOneLiner : copiedGradleCommand) ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  <span>{commandViewMode === 'flutter' ? 'Copy 1-Liner' : 'Copy Gradle Command'}</span>
+                </button>
+              </div>
             </div>
+
 
             {/* Simulation Trigger CTA */}
             <div className="p-4 bg-zinc-900/70 border-t border-zinc-800 space-y-3">

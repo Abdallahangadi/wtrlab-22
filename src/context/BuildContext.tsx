@@ -88,10 +88,14 @@ export const BuildProvider: React.FC<BuildProviderProps> = ({ children, config }
 
     steps.push({
       id: 'shrink',
-      label: cfg.minifyEnabled ? 'Shrinking Code (R8)...' : 'Merging DEX Bytecode...',
-      shortLabel: cfg.minifyEnabled ? 'R8 Shrunk' : 'D8 DEX',
+      label: cfg.minifyEnabled 
+        ? (cfg.shrinkResources ? 'Shrinking Code & Resources (R8)...' : 'Shrinking Code (R8)...') 
+        : 'Merging DEX Bytecode...',
+      shortLabel: cfg.shrinkResources ? 'R8 + Shrink' : cfg.minifyEnabled ? 'R8 Shrunk' : 'D8 DEX',
       description: cfg.minifyEnabled 
-        ? 'R8 dead-code elimination, obfuscation & Java 17 optimization' 
+        ? (cfg.shrinkResources 
+            ? 'R8 dead-code elimination & resource shrinking (-PshrinkResources=true)' 
+            : 'R8 dead-code elimination & Java 17 bytecode optimization')
         : 'D8 DEX bytecode generation without R8 minification',
       progress: 82,
       durationMs: 1100,
@@ -315,6 +319,14 @@ export const BuildProvider: React.FC<BuildProviderProps> = ({ children, config }
                 { id: `log-shrk-1-${Date.now()}`, timestamp: timeStr, type: 'gradle', text: `> Task :app:minifyReleaseWithR8: Running R8 code shrinking & dead-code elimination...` },
                 { id: `log-shrk-2-${Date.now()}`, timestamp: timeStr, type: 'gradle', text: `> Task :app:mergeDexRelease: Merging shrunk dex classes with Android R8 (Java 17 runtime)...` }
               );
+              if (config.shrinkResources) {
+                newLogs.push({
+                  id: `log-shrk-3-${Date.now()}`,
+                  timestamp: timeStr,
+                  type: 'gradle',
+                  text: `> Task :app:shrinkReleaseResources: Stripping unreferenced layout XMLs, drawables, and raw assets (shrinkResources = true, -PshrinkResources=true)...`,
+                });
+              }
             } else {
               newLogs.push(
                 { id: `log-shrk-1-${Date.now()}`, timestamp: timeStr, type: 'gradle', text: `> Task :app:mergeDexRelease: Merging dex classes with Android D8 (R8 code shrinking disabled)...` }

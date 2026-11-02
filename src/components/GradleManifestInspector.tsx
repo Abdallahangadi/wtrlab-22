@@ -91,16 +91,27 @@ export const GradleManifestInspector: React.FC<GradleManifestInspectorProps> = (
       {/* Overview Banner */}
       <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold text-zinc-100">Android Build Configuration Synchronization</h2>
             <span className="text-[11px] font-mono text-emerald-400 border border-emerald-900/80 bg-emerald-950/40 px-1.5 py-0.5 rounded">
-              Synced with Min {config.minSdk} &amp; Target {config.targetSdk}
+              Synced: Min {config.minSdk} &amp; Target {config.targetSdk}
+            </span>
+            <span className={`text-[11px] font-mono px-1.5 py-0.5 rounded border ${
+              config.shrinkResources 
+                ? 'text-emerald-300 bg-emerald-950/60 border-emerald-800' 
+                : 'text-zinc-500 bg-zinc-900 border-zinc-800'
+            }`}>
+              isShrinkResources = {config.shrinkResources.toString()}
+            </span>
+            <span className="text-[11px] font-mono text-sky-400 border border-sky-900/80 bg-sky-950/40 px-1.5 py-0.5 rounded">
+              -PshrinkResources={config.shrinkResources.toString()}
             </span>
           </div>
           <p className="text-xs text-zinc-400 mt-1">
             Ensure your Flutter project's Android source files match your release build flags to prevent Gradle compilation failures.
           </p>
         </div>
+
 
         <div className="flex items-center gap-2">
           <button

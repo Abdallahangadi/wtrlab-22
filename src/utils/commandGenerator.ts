@@ -69,6 +69,13 @@ export function generateFlutterBuildArgs(config: BuildConfig): string[] {
   return args;
 }
 
+export function generateGradleBuildCommand(config: BuildConfig): string {
+  const flags: string[] = ['./gradlew', 'assembleRelease'];
+  flags.push(`-PshrinkResources=${config.shrinkResources}`);
+  flags.push(`-PminifyEnabled=${config.minifyEnabled}`);
+  return flags.join(' ');
+}
+
 export function generateFullScript(config: BuildConfig): string {
   const lines: string[] = [];
   
@@ -276,8 +283,9 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = ${config.minifyEnabled}
-            isShrinkResources = ${config.minifyEnabled && config.shrinkResources}
+            // Code & resource shrinking flags (supports CLI -PshrinkResources and -PminifyEnabled flags)
+            isMinifyEnabled = project.findProperty("minifyEnabled")?.toString()?.toBoolean() ?: ${config.minifyEnabled}
+            isShrinkResources = project.findProperty("shrinkResources")?.toString()?.toBoolean() ?: ${config.shrinkResources}
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -348,8 +356,9 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
-            minifyEnabled ${config.minifyEnabled}
-            shrinkResources ${config.minifyEnabled && config.shrinkResources}
+            // Code & resource shrinking flags (supports CLI -PshrinkResources and -PminifyEnabled flags)
+            minifyEnabled project.hasProperty('minifyEnabled') ? project.property('minifyEnabled').toBoolean() : ${config.minifyEnabled}
+            shrinkResources project.hasProperty('shrinkResources') ? project.property('shrinkResources').toBoolean() : ${config.shrinkResources}
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -374,6 +383,9 @@ ${config.enable16KbPages ? 'android.bundle.enableUncompressedNativeLibs=true\nan
 
 # R8 Full Mode for enhanced bytecode shrinking and dead-code elimination
 android.enableR8.fullMode=${config.minifyEnabled ? 'true' : 'false'}
+
+# Android resource shrinking flag
+android.enableResourceShrinking=${config.shrinkResources}
 
 # Suppress Kotlin experimental warnings during Flutter Gradle plugin compilation
 kotlin.incremental=true
