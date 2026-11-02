@@ -1,0 +1,8 @@
+{
+  "name": "Remix Flutter Android APK Build Studio",
+  "description": "Configure, optimize, and generate production release APK builds for Flutter with targeted ABI (arm64), custom SDK levels (Min 28, Target 36), icon tree-shaking flags, Gradle scripts, and CI/CD pipelines.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
